@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Catalog Pipeline Tester</title>
+</head>
+
+<body>
+    <h2>Jewelry Catalog Pipeline</h2>
+
+    <input id="image" type="file" accept="image/*">
+    <button id="upload">Upload and Track</button>
+
+    <p id="status">Waiting for image...</p>
+    <p id="jobId"></p>
+
+    <script>
+        const imageInput = document.getElementById("image");
+        const uploadButton = document.getElementById("upload");
+        const statusText = document.getElementById("status");
+        const jobIdText = document.getElementById("jobId");
+
+        uploadButton.addEventListener("click", async () => {
+            const image = imageInput.files[0];
+
+            if (!image) {
+                statusText.textContent = "Please select an image.";
+                return;
+            }
+
+            uploadButton.disabled = true;
+            statusText.textContent = "Uploading image...";
+
+            try {
+                const formData = new FormData();
+                formData.append("image", image);
+
+                const uploadResponse = await fetch(
+                    "http://127.0.0.1:8000/jobs",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+                if (!uploadResponse.ok) {
+                    throw new Error(await uploadResponse.text());
+                }
+
+                const job = await uploadResponse.json();
+                jobIdText.textContent = `Job ID: ${job.job_id}`;
+
+                while (true) {
+                    const response = await fetch(
+                        `http://127.0.0.1:8000/jobs/${job.job_id}`
+                    );
+
+                    if (!response.ok) {
+                        throw new Error("Could not retrieve job status.");
+                    }
+
+                    const currentJob = await response.json();
+                    statusText.textContent = `Status: ${currentJob.status}`;
+
+                    if (
+                        currentJob.status === "completed" ||
+                        currentJob.status === "failed"
+                    ) {
+                        break;
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } catch (error) {
+                statusText.textContent = `Error: ${error.message}`;
+            } finally {
+                uploadButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
