@@ -10,13 +10,26 @@ from openai import OpenAI
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BACKEND_DIR / ".env")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+## client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
 
 
 def generate_catalog_image(
     input_path: str | Path,
     output_path: str | Path,
 ) -> None:
+
+
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "Image generation is disabled: OPENAI_API_KEY is not configured."
+        )
+
+    client = OpenAI(api_key=api_key)
+    
     """Edit a jewelry image into a product-catalog image."""
 
     input_path = Path(input_path)
