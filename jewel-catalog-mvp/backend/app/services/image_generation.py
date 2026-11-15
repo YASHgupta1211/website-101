@@ -5,6 +5,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from app.services.prompt_builder import build_catalog_prompt
+
 
 # Load the API key from backend/.env
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -18,6 +20,7 @@ load_dotenv(BACKEND_DIR / ".env")
 def generate_catalog_image(
     input_path: str | Path,
     output_path: str | Path,
+    preferences: dict,
 ) -> None:
 
 
@@ -35,26 +38,7 @@ def generate_catalog_image(
     input_path = Path(input_path)
     output_path = Path(output_path)
 
-    prompt = """
-    Edit the provided jewelry photograph for a premium e-commerce catalog. The jewelry should be worn by an Indian male/female model based on the suitability of the jewelery.
-
-    PRESERVE THE JEWELRY:
-    - Keep the original design, shape, proportions, and arrangement.
-    - Preserve the number, position, and appearance of stones.
-    - Preserve the metal color, setting, prongs, links, and fine details.
-    - Do not add, remove, redesign, or invent jewelry components.
-    This is a non-sexual commercial product-photography task.
-
-
-    CHANGE ONLY THE PRESENTATION:
-    - Replace the background with a clean, premium traditional indian background. 
-    - The Indian male/femalemodel should be wearing the jewelry in a natural and elegant manner, with appropriate lighting and shadows.
-    - Use soft professional lighting and realistic shadows.
-    - Keep the jewelry sharp, photorealistic, and centered.
-    - Do not add text, logos, props, or extra jewelry.
-
-    The result should resemble a professional jewelry product photograph.
-    """
+    prompt = prompt = build_catalog_prompt(preferences)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

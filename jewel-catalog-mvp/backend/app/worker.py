@@ -1,8 +1,13 @@
 import asyncio
 import sqlite3
 from pathlib import Path
+import json
 
 from app.services.image_generation import generate_catalog_image
+from app.services.prompt_builder import build_catalog_prompt
+
+
+MOCK_GENERATION = True
 
 DB_PATH = Path("jobs.db")
 GENERATED_DIR = Path("generated")
@@ -10,17 +15,23 @@ GENERATED_DIR = Path("generated")
 job_queue: asyncio.Queue[str] = asyncio.Queue()
 
 
-def get_image_path(job_id: str) -> str:
+def get_job_data(job_id: str) -> tuple[str, dict]:
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
-            "SELECT image_path FROM jobs WHERE job_id = ?",
+            """
+            SELECT image_path, preferences_json
+            FROM jobs
+            WHERE job_id = ?
+            """,
             (job_id,),
         ).fetchone()
 
     if row is None:
         raise ValueError(f"Job not found: {job_id}")
 
-    return row[0]
+    image_path, preferences_json = row
+
+    return image_path, json.loads(preferences_json)
 
 
 def update_status(job_id: str, status: str) -> None:
@@ -35,14 +46,29 @@ async def process_job(job_id: str) -> None:
     try:
         update_status(job_id, "processing")
 
-        input_path = get_image_path(job_id)
+        input_path, preferences = get_job_data(job_id)
+
+        if not preferences:
+            raise ValueError("Customer preferences are missing.")
+
         output_path = GENERATED_DIR / f"{job_id}.png"
 
-        # Run the synchronous API call without blocking FastAPI.
+        if MOCK_GENERATION:
+            prompt = build_catalog_prompt(preferences)
+
+            GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+            prompt_path = GENERATED_DIR / f"{job_id}.txt"
+            prompt_path.write_text(prompt, encoding="utf-8")
+
+            update_status(job_id, "mock_completed")
+            print(f"Mock job {job_id} completed. Prompt saved: {prompt_path}")
+            return
+
         await asyncio.to_thread(
             generate_catalog_image,
             input_path,
             output_path,
+            preferences,
         )
 
         update_status(job_id, "completed")

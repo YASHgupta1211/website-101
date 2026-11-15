@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 from uuid import uuid4
 from io import BytesIO
+from app.worker import job_queue
 
 from fastapi import File, UploadFile
 from PIL import Image, UnidentifiedImageError
@@ -141,6 +142,31 @@ def get_session(session_id: str):
     return dict(row)
 
 
+def prepare_generation_request(session: dict) -> dict:
+    if session["status"] != "ready_for_generation":
+        raise HTTPException(
+            status_code=409,
+            detail="Session is not ready for generation.",
+        )
+
+    answers = json.loads(session["answers_json"])
+
+    return {
+        "session_id": session["session_id"],
+        "image_path": session["image_path"],
+        "customer_preferences": answers,
+        "inference_requirements": {
+            "jewelry_type": "Identify from the uploaded image.",
+            "styling": "Choose styling appropriate for the jewelry and customer preferences.",
+            "outfit_color": "Choose a complementary color; do not assume a customer-specified color.",
+            "pose_and_camera_angle": "Choose to showcase the jewelry clearly.",
+            "lighting_and_background": "Choose to suit the requested background and jewelry.",
+            "resolution": "Determine suitable output dimensions for a jewelry catalog.",
+        },
+        "generation_mode": "mock_not_started",
+    }
+
+
 @router.post("/mock/start")
 def start_mock_conversation():
     session_id = str(uuid4())
@@ -237,13 +263,29 @@ def answer_mock_question(session_id: str, body: MockMessage):
             detail="Upload the photo before answering questions.",
         )
 
+    
+    
+    index = session["question_index"]
+    if index >= len(QUESTIONS):
+        raise HTTPException(status_code=409, detail="Questions are complete.")
+
     answer = body.message.strip()
     if not answer:
         raise HTTPException(status_code=400, detail="Answer cannot be empty.")
 
-    index = session["question_index"]
-    if index >= len(QUESTIONS):
-        raise HTTPException(status_code=409, detail="Questions are complete.")
+
+    allowed = QUESTIONS[index]["options"]
+    if answer.casefold() not in [option.casefold() for option in allowed]:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Choose a listed option.", "options": allowed},
+        )
+
+    answer = next(
+        option for option in allowed
+        if option.casefold() == answer.casefold()
+    )
+
 
     answers = json.loads(session["answers_json"])
     question = QUESTIONS[index]
@@ -282,6 +324,48 @@ def answer_mock_question(session_id: str, body: MockMessage):
     }
 
 
+@router.post("/mock/{session_id}/create-job", status_code=201)
+def create_mock_job(session_id: str):
+    session = get_session(session_id)
+
+    if session["status"] != "ready_for_generation":
+        raise HTTPException(
+            status_code=409,
+            detail="Session is not ready for generation.",
+        )
+
+    request_data = prepare_generation_request(session)
+
+    job_id = str(uuid4())
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO jobs (
+                job_id,
+                status,
+                image_path,
+                preferences_json
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                "received",
+                request_data["image_path"],
+                json.dumps(request_data["customer_preferences"]),
+            ),
+        )
+
+    job_queue.put_nowait(job_id)
+
+    return {
+        "job_id": job_id,
+        "status": "received",
+        "message": "Mock job created and queued.",
+    }
+
+
 @router.get("/mock/{session_id}")
 def inspect_mock_session(session_id: str):
     session = get_session(session_id)
@@ -292,4 +376,7 @@ def inspect_mock_session(session_id: str):
         "answers": json.loads(session["answers_json"]),
         "questions_answered": session["question_index"],
     }
+
+
+
 
