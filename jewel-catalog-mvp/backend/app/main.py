@@ -1,11 +1,12 @@
 from pathlib import Path
 from uuid import uuid4
 import sqlite3
+import json
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 
 from fastapi.params import Form
-from app.worker import job_queue, worker_loop
+from app.worker import GENERATED_DIR, job_queue, worker_loop
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from io import BytesIO
@@ -13,6 +14,8 @@ from PIL import Image, UnidentifiedImageError
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.whatsapp import router as whatsapp_router
+from app.services.preferences import CatalogPreferences
+from pydantic import ValidationError
 
 
 @asynccontextmanager
@@ -53,17 +56,32 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 DB_PATH = Path("jobs.db")
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+CATALOG_BACKGROUNDS = {
+    "ivory": "Soft ivory",
+    "sand": "Warm sand",
+    "midnight": "Midnight",
+}
 
 
 def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
                 job_id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
-                image_path TEXT NOT NULL
+                image_path TEXT NOT NULL,
+                preferences_json TEXT NOT NULL DEFAULT '{}'
             )
         """)
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(jobs)")
+        }
+        if "preferences_json" not in columns:
+            conn.execute("""
+                ALTER TABLE jobs
+                ADD COLUMN preferences_json TEXT NOT NULL DEFAULT '{}'
+            """)
 
 
 @app.get("/health")
@@ -75,9 +93,23 @@ def health_check():
 async def create_job(
     image: UploadFile = File(...),
     style: str = Form("ivory"),
+    preferences: str | None = Form(None),
 ):
-    if style not in {"ivory", "sand", "midnight"}:
+    if style not in CATALOG_BACKGROUNDS:
         raise HTTPException(status_code=400, detail="Invalid catalog style.")
+    try:
+        if preferences is None:
+            customer_preferences = CatalogPreferences(
+                background=CATALOG_BACKGROUNDS[style]
+            )
+        else:
+            customer_preferences = CatalogPreferences.model_validate_json(preferences)
+    except ValidationError:
+        raise HTTPException(
+            status_code=422,
+            detail="Choose a supported option for each catalog preference.",
+        )
+
     # 1. Check the declared content type.
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(
@@ -135,13 +167,18 @@ async def create_job(
 
     # 5. Create the database record.
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with closing(sqlite3.connect(DB_PATH)) as conn, conn:
             conn.execute(
                 """
-                INSERT INTO jobs (job_id, status, image_path)
-                VALUES (?, ?, ?)
+                INSERT INTO jobs (job_id, status, image_path, preferences_json)
+                VALUES (?, ?, ?, ?)
                 """,
-                (job_id, "received", str(image_path)),
+                (
+                    job_id,
+                    "received",
+                    str(image_path),
+                    json.dumps(customer_preferences.for_generation()),
+                ),
             )
     except Exception:
         image_path.unlink(missing_ok=True)
@@ -158,7 +195,7 @@ async def create_job(
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.row_factory = sqlite3.Row
         job = conn.execute(
             "SELECT job_id, status FROM jobs WHERE job_id = ?", (job_id,)
@@ -173,7 +210,7 @@ def get_job(job_id: str):
 @app.get("/jobs/{job_id}/result")
 def get_job_result(job_id: str):
     # Check whether the job exists and is completed.
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         row = conn.execute(
             "SELECT status FROM jobs WHERE job_id = ?",
             (job_id,),
@@ -189,7 +226,7 @@ def get_job_result(job_id: str):
         )
 
     # Locate the output image.
-    output_path = Path("generated") / f"{job_id}.png"
+    output_path = GENERATED_DIR / f"{job_id}.png"
 
     if not output_path.is_file():
         raise HTTPException(
@@ -202,3 +239,20 @@ def get_job_result(job_id: str):
         media_type="image/png",
         filename=f"{job_id}.png",
     )
+
+
+@app.get("/jobs/{job_id}/source")
+def get_job_source(job_id: str):
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        row = conn.execute(
+            "SELECT image_path FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    image_path = Path(row[0])
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Original image is unavailable.")
+
+    return FileResponse(path=image_path, media_type="image/png")

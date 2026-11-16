@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 import json
 
@@ -16,7 +17,7 @@ job_queue: asyncio.Queue[str] = asyncio.Queue()
 
 
 def get_job_data(job_id: str) -> tuple[str, dict]:
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         row = conn.execute(
             """
             SELECT image_path, preferences_json
@@ -35,7 +36,7 @@ def get_job_data(job_id: str) -> tuple[str, dict]:
 
 
 def update_status(job_id: str, status: str) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute(
             "UPDATE jobs SET status = ? WHERE job_id = ?",
             (status, job_id),

@@ -10,6 +10,28 @@ def build_catalog_prompt(preferences: dict) -> str:
     outfit = preferences.get("outfit", "Traditional")
     background = preferences.get("background", "Luxury studio")
 
+    if model_type == "Product only":
+        return f"""
+Create a premium, photorealistic product-only jewelry catalog photograph.
+
+CUSTOMER PREFERENCES:
+- Model type: Product only
+- Background: {background}
+
+JEWELRY PRESERVATION - HIGHEST PRIORITY:
+- Treat the uploaded photograph as the exact product reference.
+- Preserve the original design, shape, proportions, metal colour and fine details.
+- Preserve the number, position, size and appearance of all stones and settings.
+- Do not add, remove, redesign or invent jewelry components.
+
+PRODUCT PRESENTATION:
+- Show only the uploaded jewelry, with no person, face, hands or clothing.
+- Use the requested background, professional studio lighting and realistic shadows.
+- Keep the complete product sharp, prominent and clearly visible.
+- No text, watermarks, logos, additional jewelry or unnecessary props.
+- Do not compromise jewelry accuracy for artistic styling.
+"""
+
     return f"""
 Create a premium, photorealistic Indian jewelry catalog photograph.
 

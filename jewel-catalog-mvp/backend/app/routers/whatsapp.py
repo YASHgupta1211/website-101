@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from uuid import uuid4
 from io import BytesIO
@@ -109,7 +110,7 @@ QUESTIONS = [
 
 
 def init_mock_sessions():
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mock_sessions (
                 session_id TEXT PRIMARY KEY,
@@ -129,7 +130,7 @@ class MockMessage(BaseModel):
 
 
 def get_session(session_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT * FROM mock_sessions WHERE session_id = ?",
@@ -171,7 +172,7 @@ def prepare_generation_request(session: dict) -> dict:
 def start_mock_conversation():
     session_id = str(uuid4())
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute(
             """
             INSERT INTO mock_sessions (session_id, status, answers_json)
@@ -235,7 +236,7 @@ async def upload_mock_photo(
     finally:
         await image.close()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute(
             """
             UPDATE mock_sessions
@@ -294,7 +295,7 @@ def answer_mock_question(session_id: str, body: MockMessage):
     complete = next_index == len(QUESTIONS)
     status = "ready_for_generation" if complete else "collecting_answers"
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute(
             """
             UPDATE mock_sessions
@@ -338,7 +339,7 @@ def create_mock_job(session_id: str):
 
     job_id = str(uuid4())
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute(
             """
             INSERT INTO jobs (
