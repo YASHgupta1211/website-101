@@ -367,3 +367,133 @@ h1, h2, h3, p { overflow-wrap: break-word }
   html { scroll-behavior: auto }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important }
 }
+
+/* Navigation stays available on both pages, including phone widths. */
+.page-navigation { display: flex; align-items: center; gap: 24px; font-size: 14px }
+.page-navigation a { padding: 12px 0; text-decoration: none; border-bottom: 1px solid transparent }
+.page-navigation a:hover, .page-navigation a[aria-current=page] { border-color: var(--gold); color: var(--ink) }
+.workspace-intro h1 { font: 400 clamp(30px, 4vw, 44px)/1.2 var(--serif); letter-spacing: -1px; margin: 0 }
+.landing-page .hero h1 { font-style: normal; line-height: 1.16 }
+.landing-page .hero-copy { font-size: 16px; line-height: 1.8 }
+.landing-page .hero-cta, .landing-page .hero-link { font-size: 14px; min-height: 44px }
+.landing-page .guide-item h3 { font-size: 14px }
+.landing-page .guide-item p { font-size: 14px; max-width: 210px }
+.landing-page .guide-intro h2 { font-size: 24px }
+.footer > a:last-child { font-size: 14px; text-underline-offset: 4px }
+@media (max-width: 600px) {
+  .page-navigation { gap: 14px; font-size: 12px }
+  .page-navigation a { min-height: 44px; display: flex; align-items: center }
+  .landing-page .hero h1 br:first-of-type { display: initial }
+  .landing-page .studio-guide { grid-template-columns: 1fr; gap: 24px }
+  .landing-page .guide-item p { max-width: none }
+  .workspace-intro { padding-top: 36px }
+}
+/* Shared site navigation and browser profile. */
+.site-header { position: sticky; top: 0; z-index: 20; background: #f8f6f0f5; backdrop-filter: blur(14px) }
+.brand-monogram { display: grid; place-items: center; width: 38px; height: 42px; border: 1px solid #ad956e; border-radius: 18px 18px 3px 3px; font: 28px var(--serif); color: var(--gold) }
+.site-header .page-navigation { margin-left: auto; gap: 30px }
+.site-header .dashboard-nav-link { border: 1px solid #aaa27f; padding: 12px 18px; border-radius: 3px }
+.site-header .dashboard-nav-link[aria-current=page] { background: var(--ink); color: var(--paper); border-color: var(--ink) }
+.profile-avatar { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; border: 1px solid #bfc5ad; border-radius: 50%; background: #e7ebdd; color: #48543c; font-size: 14px; font-weight: 600 }
+.profile-avatar:hover { background: #dbe3cd }
+.profile-avatar svg { width: 24px; height: 24px }
+.profile-dialog { width: min(460px, calc(100% - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 30px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); box-shadow: 0 24px 90px #18201430 }
+.profile-dialog::backdrop { background: #18201465; backdrop-filter: blur(3px) }
+.profile-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px }
+.profile-dialog-heading .eyebrow { margin-bottom: 8px }
+.profile-dialog h2 { font: 32px var(--serif); margin: 0 }
+.profile-dialog > p { font-size: 14px; line-height: 1.7; color: var(--muted) }
+.profile-close { border: 0; background: transparent; color: var(--ink); font-size: 28px; width: 44px; height: 44px }
+.profile-form { display: grid; gap: 18px; margin-top: 24px }
+.profile-form label { display: grid; gap: 8px; font-size: 14px }
+.profile-form input { min-height: 46px; width: 100%; border: 1px solid #d6d9c8; border-radius: 4px; padding: 10px 12px; background: #fafaf5; color: var(--ink); font-size: 16px }
+.profile-form input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+.profile-form .primary-button { margin: 0; font-size: 14px }
+.profile-feedback { font-size: 14px; line-height: 1.6; margin: 0 }
+.profile-dialog .profile-storage-note { font-size: 12px; padding-top: 18px; border-top: 1px solid var(--line); margin-bottom: 0 }
+/* The home page introduces the product; the dashboard holds creation tools. */
+.explore-section { padding: 80px 0 }
+.section-heading { display: flex; justify-content: space-between; gap: 30px; align-items: flex-end; margin-bottom: 32px }
+.section-heading .eyebrow { margin-bottom: 12px }
+.section-heading h2, .pilot-section h2 { font: 400 clamp(28px, 3vw, 40px)/1.25 var(--serif); letter-spacing: -.8px; margin: 0 }
+.editorial-showcase { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center }
+.editorial-showcase figure { margin: 0; position: relative }
+.editorial-showcase img { display: block; width: 100%; height: 420px; object-fit: cover; object-position: center 60%; border-radius: 6px }
+.editorial-showcase figcaption { position: absolute; bottom: 16px; left: 16px; color: #fffbed; background: #263020b8; padding: 8px 12px; border-radius: 3px; font-size: 12px }
+.presentation-options { display: grid; gap: 28px }
+.presentation-options article + article { border-top: 1px solid var(--line); padding-top: 28px }
+.presentation-options h3 { font: 26px var(--serif); margin: 0 0 12px }
+.presentation-options p { color: var(--muted); font-size: 16px; line-height: 1.8; margin: 0; max-width: 430px }
+.presentation-options > a { justify-self: start }
+.palette-preview { display: flex; gap: 10px; margin-top: 18px }
+.palette-preview span { width: 54px; height: 36px; border-radius: 3px; border: 1px solid #dddccb }
+.pilot-section { display: flex; justify-content: space-between; align-items: center; gap: 40px; background: #eceee3; padding: 40px; border-radius: 6px }
+.pilot-section .eyebrow { margin-bottom: 12px }
+.pilot-section p:last-child { font-size: 16px; line-height: 1.8; color: #626b56; max-width: 630px; margin-bottom: 0 }
+.pilot-section > a { flex-shrink: 0; font-size: 14px }
+.dashboard-layout { display: grid; grid-template-columns: 205px minmax(0, 1fr); gap: 32px; align-items: start }
+.dashboard-sidebar { position: sticky; top: 124px; padding: 30px 20px 30px 0; border-right: 1px solid var(--line); margin-top: 32px }
+.sidebar-label { font-size: 11px; letter-spacing: 1.4px; color: var(--muted); margin: 0 0 20px 12px }
+.sidebar-link { display: flex; align-items: center; gap: 12px; padding: 14px 12px; margin-bottom: 6px; font-size: 14px; border-radius: 4px; text-decoration: none; color: #626c56 }
+.sidebar-link .studio-icon { width: 18px; height: 18px }
+.sidebar-link:hover, .sidebar-link.active { background: #e9eddf; color: #34452b }
+.workspace-summary { border-top: 1px solid var(--line); margin: 28px 0 0; padding: 24px 12px 0 }
+.workspace-summary h2 { font: 20px var(--serif); margin: 0 0 18px }
+.workspace-summary dl { font-size: 12px; margin: 0 }
+.workspace-summary dl div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0 }
+.workspace-summary dd { margin: 0; font-weight: 600 }
+.workspace-summary p { font-size: 12px; line-height: 1.8; color: var(--muted); margin-top: 16px }
+.dashboard-content { min-width: 0 }
+.dashboard-content .workspace-intro { padding-top: 38px }
+.dashboard-content .workspace-intro > p { display: none }
+.dashboard-content .workspace { gap: 20px }
+.dashboard-content .panel { padding: 22px }
+.dashboard-content .panel h2 { font-size: 23px }
+.dashboard-content .subtle-label { font-size: 10px }
+.dashboard-content .choice-fieldset legend, .dashboard-content .select-field { font-size: 14px }
+.dashboard-content .select-field select { font-size: 16px }
+.dashboard-content .mode-option .mode-title { font-size: 12px }
+.dashboard-content .mode-option small { font-size: 10px }
+.dashboard-content .swatch-label { font-size: 12px }
+.dashboard-content .dropzone > span:not(.upload-symbol), .dashboard-content .dropzone small { font-size: 12px }
+.dashboard-content .dropzone strong, .dashboard-content .secondary-button, .dashboard-content .primary-button { font-size: 14px }
+.dashboard-content .prototype-note, .dashboard-content .field-help { font-size: 12px }
+.dashboard-content .comparison-grid { grid-template-columns: 1fr }
+.dashboard-content .comparison-stage { aspect-ratio: 4 / 3 }
+.dashboard-content .comparison-item figcaption { font-size: 11px }
+.dashboard-content .empty-preview strong { font-size: 22px }
+.dashboard-content .empty-preview > span:last-child { font-size: 13px }
+.dashboard-content .job-progress { font-size: 14px }
+.dashboard-content .result-footer { flex-wrap: wrap }
+.dashboard-content .result-footer strong { font-size: 13px }
+.dashboard-content .result-footer span, .dashboard-content .download-button { font-size: 12px }
+.history-empty { font-size: 14px; color: var(--muted); line-height: 1.7; padding: 16px 0 }
+@media (min-width: 1400px) { .dashboard-content .comparison-grid { grid-template-columns: 1fr 1fr } .dashboard-content .comparison-stage { aspect-ratio: 3 / 4 } }
+@media (max-width: 1100px) { .dashboard-layout { grid-template-columns: 175px minmax(0, 1fr); gap: 22px } .dashboard-content .workspace { grid-template-columns: 1fr } .dashboard-content .comparison-grid { grid-template-columns: 1fr 1fr } .dashboard-content .comparison-stage { aspect-ratio: 3 / 4 } .site-header .page-navigation { gap: 18px } }
+@media (max-width: 850px) { .dashboard-layout { grid-template-columns: 1fr } .dashboard-sidebar { position: static; display: flex; gap: 10px; flex-wrap: wrap; padding: 18px 0; margin-top: 0; border-right: 0; border-bottom: 1px solid var(--line) } .sidebar-label, .workspace-summary { display: none } .sidebar-link { margin: 0; font-size: 13px } .dashboard-content .workspace-intro { padding-top: 10px } .editorial-showcase { gap: 30px } .site-header .brand { font-size: 22px } }
+@media (max-width: 600px) { .site-header { flex-wrap: wrap; height: auto; min-height: 80px; gap: 12px; padding: 16px 0 0 } .site-header .brand { margin-right: auto } .profile-avatar { order: 1 } .site-header .page-navigation { order: 2; width: 100%; justify-content: space-between; gap: 10px; margin: 0; padding: 8px 0 12px; font-size: 12px } .site-header .page-navigation a { min-height: 40px; padding: 10px 4px } .site-header .dashboard-nav-link { padding-inline: 12px !important } .section-heading { align-items: flex-start; flex-direction: column; gap: 12px } .explore-section { padding: 44px 0 } .editorial-showcase { grid-template-columns: 1fr; gap: 30px } .editorial-showcase img { height: 330px } .pilot-section { flex-direction: column; align-items: flex-start; padding: 26px; gap: 24px } .dashboard-sidebar { gap: 4px } .sidebar-link { padding: 10px 8px; font-size: 12px; gap: 6px } .sidebar-link .studio-icon { width: 15px; height: 15px } .dashboard-content .panel { padding: 18px } .dashboard-content .mode-option small { display: none } .dashboard-content .mode-option .mode-title { font-size: 11px } .dashboard-content .swatch-label { font-size: 10px } .dashboard-content .comparison-grid { grid-template-columns: 1fr } .dashboard-content .comparison-stage { aspect-ratio: 4 / 3 } .profile-dialog { padding: 24px } }
+/* Photograph windows use the supplied references without their website UI. */
+.reference-photo { position: relative; overflow: hidden; width: 100%; background: #e8e5dc; isolation: isolate }
+.reference-photo img { position: absolute; display: block; max-width: none; object-fit: fill }
+.hero-reference-mosaic { position: relative; padding: 0 0 40px 22px }
+.hero-reference-mosaic figure { margin: 0 }
+.hero-model-reference { width: 86%; margin-left: auto !important; position: relative }
+.hero-model-reference .reference-photo { border-radius: 150px 150px 5px 5px }
+.hero-model-reference figcaption { position: absolute; bottom: 18px; left: 18px; padding: 8px 12px; background: #253021c9; color: #fffaf0; font-size: 12px; border-radius: 3px }
+.hero-detail-reference { width: 60%; position: relative; margin-top: -48px !important; border: 8px solid var(--paper); border-radius: 5px; box-shadow: 0 18px 45px #30382f20; background: var(--paper) }
+.hero-detail-reference .reference-photo { border-radius: 2px }
+.hero-detail-reference figcaption { font: 18px var(--serif); padding: 12px 6px 8px; color: #655c40 }
+.reference-gallery-note { margin: -16px 0 28px; color: var(--muted); font-size: 14px }
+.reference-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start }
+.reference-gallery figure { min-width: 0; margin: 0 }
+.reference-gallery figure:nth-child(2) { margin-top: 40px }
+.reference-gallery .reference-photo { border-radius: 5px }
+.reference-gallery figcaption { display: flex; flex-direction: column; gap: 7px; padding-top: 18px }
+.reference-gallery figcaption span:first-child { font: 24px var(--serif) }
+.reference-gallery figcaption span:last-child { font-size: 13px; color: var(--muted) }
+.gallery-invitation { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid var(--line); margin-top: 36px; padding-top: 28px }
+.gallery-invitation p { font-size: 16px; line-height: 1.7; color: var(--muted); max-width: 430px; margin: 0 }
+.gallery-invitation a { font-size: 14px; flex-shrink: 0 }
+.dashboard-greeting { margin: 0 0 12px; font-size: 20px; color: #74704d; line-height: 1.5 }
+@media (max-width: 850px) { .hero-reference-mosaic { padding-left: 0 } .hero-model-reference { width: 92% } .hero-detail-reference { width: 76% } .hero-detail-reference figcaption { font-size: 15px } .reference-gallery { gap: 16px } .reference-gallery figcaption span:first-child { font-size: 20px } }
+@media (max-width: 600px) { .hero-reference-mosaic { max-width: 400px; width: 100%; margin: 0 auto; padding-bottom: 10px } .hero-model-reference { width: 85% } .hero-detail-reference { width: 64%; margin-top: -40px !important } .reference-gallery { grid-template-columns: 1fr 1fr; gap: 24px 16px } .reference-gallery figure:nth-child(2) { margin-top: 24px } .reference-gallery figure:last-child { grid-column: 1 / -1; width: 66%; margin: 0 auto } .reference-gallery-note { line-height: 1.7 } .gallery-invitation { flex-direction: column; align-items: flex-start } .dashboard-greeting { font-size: 18px } }

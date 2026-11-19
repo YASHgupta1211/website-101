@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { SiteHeader, SiteFooter, readProfile } from './SiteChrome'
 
 type ModelType = 'Product only' | 'Female' | 'Male'
 type Preferences = {
@@ -108,7 +109,8 @@ function SelectField({ label, value, options, onChange }: {
   )
 }
 
-export default function App() {
+function StudioPage() {
+  const [profile, setProfile] = useState(readProfile)
   const inputRef = useRef<HTMLInputElement>(null)
   const reviewRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
@@ -305,39 +307,21 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="Jewel Studio home">
-          <span className="brand-mark"><StudioIcon name="gem" /></span><span>jewel<span className="brand-light">studio</span><small>THE CATALOG ATELIER</small></span>
-        </a>
-        <nav className="topbar-nav" aria-label="Main navigation"><a href="#studio">The studio</a><a href="#how-it-works">How it works</a>{history.length > 0 && <a href="#requests">Your collection</a>}</nav>
-        <span className="prototype-pill"><span className="status-dot" /> Early access</span>
-      </header>
-      <section className="hero" id="top">
-        <div className="hero-content">
-          <p className="eyebrow"><span /> A NEW PERSPECTIVE ON PRODUCT PHOTOGRAPHY</p>
-          <h1>Extraordinary pieces. <br /><em>Beautifully</em><br />presented.</h1>
-          <p className="hero-copy">From a simple photo to a considered catalog image. Give your jewelry the light, setting, and attention it deserves.</p>
-          <div className="hero-actions"><a className="hero-cta" href="#studio">Step into the studio <StudioIcon name="arrow" /></a><a className="hero-link" href="#how-it-works">See how it works <span aria-hidden="true">&#8599;</span></a></div>
-          <div className="hero-footnote"><span className="mini-gem"><StudioIcon name="gem" /></span><p>Made for your craft.<br /><strong>Designed around every detail.</strong></p></div>
-        </div>
-        <div className="hero-art">
-          <div className="editorial-frame">
-            <img src="/images/studio-editorial.png" alt="Editorial still life of gold earrings on a sculptural pedestal" fetchPriority="high" />
-            <div className="editorial-topline"><span>THE STUDIO EDIT</span><StudioIcon name="spark" /></div>
-            <div className="editorial-caption"><span>A STUDY IN LIGHT & FORM</span><p>Small details.<br /><em>Lasting impressions.</em></p></div>
-            <span className="concept-label">Editorial concept</span>
+      <SiteHeader studio onProfileChange={setProfile} />
+      <div className="dashboard-layout">
+        <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
+          <p className="sidebar-label">YOUR WORKSPACE</p>
+          <a className="sidebar-link active" href="#studio" aria-current="location"><StudioIcon name="spark" />Create an image</a>
+          <a className="sidebar-link" href="#requests"><StudioIcon name="image" />Recent requests</a>
+          <a className="sidebar-link" href="/"><StudioIcon name="gem" />Back to home</a>
+          <div className="workspace-summary">
+            <h2>This browser</h2>
+            <dl><div><dt>Recent requests</dt><dd>{history.length}</dd></div><div><dt>Images ready</dt><dd>{history.filter(job => job.status === 'completed').length}</dd></div></dl>
+            <p>Request history and profile details are saved on this device.</p>
           </div>
-          <span className="editorial-side-note">JEWEL STUDIO / A DIFFERENT KIND OF FINISH</span>
-          <div className="detail-note"><StudioIcon name="spark" /><div><strong>Your piece. A new perspective.</strong><span>Thoughtful settings, beautiful light.</span></div></div>
-        </div>
-      </section>
-      <section className="studio-guide" id="how-it-works" aria-label="How it works">
-        <div className="guide-intro"><span className="eyebrow">FROM PHOTO TO FINISH</span><h2>A little direction.<br /><em>A beautiful difference.</em></h2></div>
-        <div className="guide-item"><span className="guide-number">01</span><div><h3>Start with your piece</h3><p>One clear photo is all you need to begin.</p></div></div>
-        <div className="guide-item"><span className="guide-number">02</span><div><h3>Make it your own</h3><p>Choose the setting, styling, and mood.</p></div></div>
-        <div className="guide-item"><span className="guide-number">03</span><div><h3>Meet your new image</h3><p>Compare the details. Download your favorite.</p></div></div>
-      </section>
-      <section className="workspace-intro" id="studio" aria-labelledby="studio-heading"><div><p className="eyebrow">YOUR CREATIVE SPACE</p><h2 id="studio-heading">A fresh setting for <em>your story.</em></h2></div><p>You bring the jewelry.<br />We help set the scene.</p></section>
+        </aside>
+        <div className="dashboard-content">
+      <section className="workspace-intro" id="studio" aria-labelledby="studio-heading"><div><p className="dashboard-greeting">{profile.name.trim() ? `Hi, ${profile.name.trim().split(/\s+/)[0]}.` : 'Hi there.'}</p><h1 id="studio-heading">Create your catalog image</h1></div><p>You bring the jewelry.<br />We help set the scene.</p></section>
       <ol className="flow-steps" aria-label="Your progress"><li className={source ? 'complete' : 'current'} aria-current={!source ? 'step' : undefined}><span>{source ? <StudioIcon name="check" /> : '01'}</span>Upload your photo</li><li className={source && !reviewing ? 'current' : ''} aria-current={source && !reviewing ? 'step' : undefined}><span>02</span>Set the direction</li><li className={reviewing ? 'current' : ''} aria-current={reviewing ? 'step' : undefined}><span>03</span>Review & create</li></ol>
       <section className="workspace" aria-label="Catalog generator">
         <form className="panel upload-panel" onSubmit={reviewRequest}>
@@ -351,7 +335,7 @@ export default function App() {
                 <button type="button" className="text-button" onClick={() => inputRef.current?.click()}>Replace photo</button>
               </> : <>
 <span className="upload-symbol"><StudioIcon name="upload" /><span className="upload-spark"><StudioIcon name="spark" /></span></span>
-                <strong>Drop your jewelry photo here</strong><span>A clear photo. A beautiful starting point.</span>
+                <strong>Drop your jewelry photo here</strong><span>Use a clear photo with the whole piece visible.</span>
                 <button type="button" className="secondary-button" onClick={() => inputRef.current?.click()}>Choose your photo <span aria-hidden="true">+</span></button>
               </>}
               <small>JPG, PNG, WebP · Up to 10 MB</small>
@@ -401,7 +385,7 @@ export default function App() {
           <p className="prototype-note">One photo, one catalog image. Check jewelry details before publishing your result.</p>
         </form>
         <div className="panel result-panel" ref={resultRef} tabIndex={-1}>
-          <div className="panel-heading"><div><span className="step">02</span><h2>The preview</h2></div><span className="preview-badge"><span /> LIVE CANVAS</span></div>
+          <div className="panel-heading"><div><span className="step">02</span><h2>The preview</h2></div></div>
           <div className="job-progress" role="status" aria-live="polite">
             {selectedJob && isPending(selectedJob.status) && !trackingError && <span className="spinner" />}
             <strong>{selectedJob ? STATUS_LABELS[selectedJob.status] : 'A new perspective awaits'}</strong>
@@ -435,13 +419,74 @@ export default function App() {
           <div className="result-footer"><div><strong>{selectedJob?.status === 'completed' ? 'Compare the details before use' : 'Your jewelry stays the focus'}</strong><span>{selectedJob?.status === 'completed' ? 'Check stones, settings, shape, and metal color.' : 'Your result will appear above when ready.'}</span></div><button type="button" className="download-button" disabled={selectedJob?.status !== 'completed' || downloading} onClick={downloadOutput}>{downloading ? 'Downloading…' : 'Download PNG'}</button></div>
         </div>
       </section>
-      {history.length > 0 && <section className="panel history-panel" id="requests" aria-labelledby="history-heading">
-        <div className="panel-heading"><div><span className="step">03</span><h2 id="history-heading">Your recent creations</h2></div><span className="subtle-label">This browser</span></div>
+      <section className="panel history-panel" id="requests" aria-labelledby="history-heading">
+        <div className="panel-heading"><div><span className="step">03</span><h2 id="history-heading">Recent requests</h2></div><span className="subtle-label">This browser</span></div>
         <p className="field-help">Your last 12 requests are saved in this browser. Select one to check its status or view its image.</p>
+        {history.length === 0 && <p className="history-empty">Your requests will appear here after you create your first brief.</p>}
         <div className="history-list">{history.map(job => <button type="button" className={`history-item ${selectedId === job.id ? 'selected' : ''}`} key={job.id} aria-pressed={selectedId === job.id} disabled={submitting} onClick={() => { setSelectedId(job.id); setRecheck(value => value + 1) }}><span><strong>{job.filename}</strong><small>{job.preferences.model_type} · {job.preferences.background} · {new Date(job.createdAt).toLocaleDateString()}</small></span><span className="history-status">{STATUS_LABELS[job.status]}</span></button>)}</div>
-      </section>}
+      </section>
       {storageError && <p className="error-message" role="alert">{storageError}</p>}
-<footer className="footer"><a className="brand footer-brand" href="#top"><StudioIcon name="gem" /><span>jewel<span className="brand-light">studio</span></span></a><span>A little light. A new perspective.</span><span>MADE FOR THE DETAILS.</span></footer>
+        </div>
+      </div>
+      <SiteFooter />
     </main>
   )
+}
+
+function ReferencePhoto({ source, crop, alt, priority = false }: {
+  source: 'gallery' | 'styling'; crop: [number, number, number, number]; alt: string; priority?: boolean
+}) {
+  const [x, y, width, height] = crop
+  const dimensions = source === 'gallery' ? [1867, 762] : [1882, 846]
+  return <div className="reference-photo" style={{ aspectRatio: `${width} / ${height}` }}>
+    <img src={`/images/reference-jewelry-${source}.png`} alt={alt} loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : 'auto'} style={{ width: `${dimensions[0] / width * 100}%`, height: `${dimensions[1] / height * 100}%`, left: `${-x / width * 100}%`, top: `${-y / height * 100}%` }} />
+  </div>
+}
+
+function LandingPage() {
+  return (
+    <main className="app-shell landing-page">
+      <SiteHeader />
+      <section className="hero" id="top">
+        <div className="hero-content">
+          <p className="eyebrow"><span /> A NEW PERSPECTIVE ON PRODUCT PHOTOGRAPHY</p>
+          <h1>Your jewelry.<br />Ready for<br />the catalog.</h1>
+          <p className="hero-copy">Upload your jewelry photo. Choose a product shot or an adult model, set the styling, and review your catalog image.</p>
+          <div className="hero-actions"><a className="hero-cta" href="/studio">Create a catalog image</a><a className="hero-link" href="#how-it-works">See how it works</a></div>
+          <div className="hero-footnote"><span className="mini-gem"><StudioIcon name="gem" /></span><p>Made for your craft.<br /><strong>Designed around every detail.</strong></p></div>
+        </div>
+        <div className="hero-reference-mosaic">
+          <figure className="hero-model-reference"><ReferencePhoto source="gallery" crop={[485, 124, 408, 402]} alt="Bridal jewelry styled with a red outfit" priority /><figcaption>Model styling inspiration</figcaption></figure>
+          <figure className="hero-detail-reference"><ReferencePhoto source="styling" crop={[262, 455, 570, 304]} alt="Close-up of a gold and pink gemstone earring" /><figcaption>Every detail, in focus.</figcaption></figure>
+        </div>
+      </section>
+      <section className="studio-guide" id="how-it-works" aria-label="How it works">
+        <div className="guide-intro"><span className="eyebrow">FROM PHOTO TO FINISH</span><h2>From your photo<br />to a catalog image.</h2></div>
+        <div className="guide-item"><div><h3>Start with your piece</h3><p>One clear photo is all you need to begin.</p></div></div>
+        <div className="guide-item"><div><h3>Make it your own</h3><p>Choose the setting, styling, and mood.</p></div></div>
+        <div className="guide-item"><div><h3>Meet your new image</h3><p>Compare the details. Download your favorite.</p></div></div>
+      </section>
+
+      <section className="explore-section" id="gallery" aria-labelledby="gallery-heading">
+        <div className="section-heading"><div><p className="eyebrow">INSIDE THE STUDIO</p><h2 id="gallery-heading">Find the setting for your piece.</h2></div><a className="hero-link" href="/studio">Open the dashboard</a></div>
+        <p className="reference-gallery-note">Styling references supplied for this website.</p>
+        <div className="reference-gallery">
+          <figure><ReferencePhoto source="gallery" crop={[51, 124, 408, 376]} alt="Gold necklace and matching earrings on a dark display" /><figcaption><span>Statement sets</span><span>Contrast & detail</span></figcaption></figure>
+          <figure><ReferencePhoto source="gallery" crop={[918, 124, 408, 441]} alt="Detailed gold pendant against a clean ivory background" /><figcaption><span>Product portraits</span><span>Light & texture</span></figcaption></figure>
+          <figure><ReferencePhoto source="gallery" crop={[1352, 124, 408, 365]} alt="Gold infinity ring on a dark jewelry stand" /><figcaption><span>Everyday pieces</span><span>Shape & finish</span></figcaption></figure>
+        </div>
+        <div className="gallery-invitation"><p>Choose a product shot or style your piece on an adult model.</p><a className="hero-cta" href="/studio">Create your image brief</a></div>
+      </section>
+      <section className="pilot-section" id="access" aria-labelledby="access-heading"><div><p className="eyebrow">EARLY ACCESS</p><h2 id="access-heading">Try your first image brief.</h2><p>The studio currently processes photos and preferences in preview mode. Generated images will be available when live generation is enabled.</p></div><a className="hero-cta" href="/studio">Go to dashboard</a></section>
+      <SiteFooter />
+    </main>
+  )
+}
+
+export default function App() {
+  const studio = window.location.pathname.replace(/\/+$/, '') === '/studio'
+  useEffect(() => {
+    document.title = studio ? 'Create a catalog image | Jewel Studio' : 'Jewel Studio | Jewelry catalog photography'
+  }, [studio])
+  return studio ? <StudioPage /> : <LandingPage />
 }
