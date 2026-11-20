@@ -6,7 +6,10 @@ import {
   useRef,
   useState,
 } from 'react'
-import { SiteHeader, SiteFooter, readProfile } from './SiteChrome'
+import { SiteHeader, SiteFooter } from './SiteChrome'
+import { useAuth } from './AuthContext'
+import { AuthPage } from './AuthPage'
+import { apiFetch } from './api'
 
 type ModelType = 'Product only' | 'Female' | 'Male'
 type Preferences = {
@@ -26,8 +29,6 @@ type SavedJob = {
 }
 type ImageFile = { file: File; url: string }
 
-const API_URL = 'http://127.0.0.1:8000'
-const HISTORY_KEY = 'jewel-studio-jobs-v1'
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const BACKGROUNDS = [
@@ -44,25 +45,32 @@ const DEFAULT_PREFERENCES: Preferences = {
   skin_tone: 'Choose for me', outfit: 'Traditional',
 }
 
-function readHistory(): SavedJob[] {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-    if (!Array.isArray(value)) return []
-    return value.filter((job): job is SavedJob => {
-      if (!job || typeof job !== 'object') return false
-      const item = job as Partial<SavedJob>
-      return typeof item.id === 'string' && /^[\da-f-]{36}$/i.test(item.id)
-        && typeof item.filename === 'string' && typeof item.createdAt === 'number'
-        && Number.isFinite(item.createdAt)
-        && typeof item.status === 'string' && Object.hasOwn(STATUS_LABELS, item.status)
-        && !!item.preferences && ['Product only', 'Female', 'Male'].includes(item.preferences.model_type)
-        && ['background', 'age_range', 'skin_tone', 'outfit'].every(
-          key => typeof (item.preferences as unknown as Record<string, unknown>)[key] === 'string',
-        )
-    }).slice(0, 12)
-  } catch {
-    return []
-  }
+function PrivateImage({ path, alt, reload, onError }: {
+  path: string; alt: string; reload: number; onError: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [failed, setFailed] = useState(false)
+  const errorHandler = useRef(onError)
+  errorHandler.current = onError
+  useEffect(() => {
+    const controller = new AbortController()
+    let objectUrl = ''
+    setUrl('')
+    setFailed(false)
+    void apiFetch(path, { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('Image unavailable')
+      const blob = await response.blob()
+      if (!blob.type.startsWith('image/')) throw new Error('Invalid image response')
+      if (controller.signal.aborted) return
+      objectUrl = URL.createObjectURL(blob)
+      setUrl(objectUrl)
+    }).catch(() => {
+      if (!controller.signal.aborted) { setFailed(true); errorHandler.current() }
+    })
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [path, reload])
+  if (failed) return <span className="image-unavailable">Image unavailable</span>
+  return url ? <img src={url} alt={alt} onError={() => { setFailed(true); errorHandler.current() }} /> : <span role="status">Loading photo...</span>
 }
 
 function isPending(status: JobStatus) {
@@ -110,7 +118,7 @@ function SelectField({ label, value, options, onChange }: {
 }
 
 function StudioPage() {
-  const [profile, setProfile] = useState(readProfile)
+  const { profile } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
   const reviewRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
@@ -118,13 +126,14 @@ function StudioPage() {
   const uploadController = useRef<AbortController | null>(null)
   const [source, setSource] = useState<ImageFile | null>(null)
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES)
-  const [history, setHistory] = useState<SavedJob[]>(readHistory)
-  const [selectedId, setSelectedId] = useState(() => readHistory()[0]?.id || '')
+  const [history, setHistory] = useState<SavedJob[]>([])
+  const [selectedId, setSelectedId] = useState('')
   const [reviewing, setReviewing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [trackingError, setTrackingError] = useState('')
-  const [storageError, setStorageError] = useState('')
+  const [historyError, setHistoryError] = useState('')
+  const [historyReload, setHistoryReload] = useState(0)
   const [mediaError, setMediaError] = useState('')
   const [recheck, setRecheck] = useState(0)
   const [downloading, setDownloading] = useState(false)
@@ -136,13 +145,23 @@ function StudioPage() {
   useEffect(() => () => uploadController.current?.abort(), [])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
-      setStorageError('')
-    } catch {
-      setStorageError('Browser storage is unavailable. Keep this page open to track your request.')
-    }
-  }, [history])
+    const controller = new AbortController()
+    setHistoryError('')
+    void apiFetch('/jobs', { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('History unavailable')
+      const jobs = await response.json() as { job_id: string; filename: string; created_at: string; status: JobStatus; preferences: Partial<Preferences> }[]
+      if (controller.signal.aborted) return
+      const restored = jobs.map(job => ({
+        id: job.job_id, filename: job.filename, createdAt: Date.parse(job.created_at) || 0,
+        status: job.status, preferences: { ...DEFAULT_PREFERENCES, ...job.preferences },
+      }))
+      setHistory(items => [...items, ...restored.filter(job => !items.some(item => item.id === job.id))].slice(0, 12))
+      setSelectedId(current => current || restored[0]?.id || '')
+    }).catch(() => {
+      if (!controller.signal.aborted) setHistoryError('Your requests could not be loaded. Check your connection and try again.')
+    })
+    return () => controller.abort()
+  }, [historyReload])
 
   useEffect(() => {
     if (reviewing) reviewRef.current?.focus()
@@ -162,7 +181,7 @@ function StudioPage() {
 
     async function poll() {
       try {
-        const response = await fetch(`${API_URL}/jobs/${selectedId}`, { signal: controller.signal })
+        const response = await apiFetch(`/jobs/${selectedId}`, { signal: controller.signal })
         if (!response.ok) {
           throw new Error(response.status === 404
             ? 'This request is no longer available. Choose a photo to create a new one.'
@@ -247,7 +266,7 @@ function StudioPage() {
         model_type: preferences.model_type, background: preferences.background,
       }
       formData.append('preferences', JSON.stringify(requestPreferences))
-      const response = await fetch(`${API_URL}/jobs`, { method: 'POST', body: formData, signal: controller.signal })
+      const response = await apiFetch(`/jobs`, { method: 'POST', body: formData, signal: controller.signal })
       if (!response.ok) {
         const body = await response.json().catch(() => null)
         throw new Error(typeof body?.detail === 'string' ? body.detail
@@ -282,7 +301,7 @@ function StudioPage() {
     setDownloading(true)
     setMediaError('')
     try {
-      const response = await fetch(`${API_URL}/jobs/${selectedJob.id}/result`)
+      const response = await apiFetch(`/jobs/${selectedJob.id}/result`)
       if (!response.ok) throw new Error('The image could not be downloaded. Please try again.')
       const url = URL.createObjectURL(await response.blob())
       const link = document.createElement('a')
@@ -307,7 +326,7 @@ function StudioPage() {
 
   return (
     <main className="app-shell">
-      <SiteHeader studio onProfileChange={setProfile} />
+      <SiteHeader studio />
       <div className="dashboard-layout">
         <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
           <p className="sidebar-label">YOUR WORKSPACE</p>
@@ -315,13 +334,13 @@ function StudioPage() {
           <a className="sidebar-link" href="#requests"><StudioIcon name="image" />Recent requests</a>
           <a className="sidebar-link" href="/"><StudioIcon name="gem" />Back to home</a>
           <div className="workspace-summary">
-            <h2>This browser</h2>
+            <h2>Your account</h2>
             <dl><div><dt>Recent requests</dt><dd>{history.length}</dd></div><div><dt>Images ready</dt><dd>{history.filter(job => job.status === 'completed').length}</dd></div></dl>
-            <p>Request history and profile details are saved on this device.</p>
+            <p>Your requests and profile are saved in your account.</p>
           </div>
         </aside>
         <div className="dashboard-content">
-      <section className="workspace-intro" id="studio" aria-labelledby="studio-heading"><div><p className="dashboard-greeting">{profile.name.trim() ? `Hi, ${profile.name.trim().split(/\s+/)[0]}.` : 'Hi there.'}</p><h1 id="studio-heading">Create your catalog image</h1></div><p>You bring the jewelry.<br />We help set the scene.</p></section>
+      <section className="workspace-intro" id="studio" aria-labelledby="studio-heading"><div><p className="dashboard-greeting">{(profile?.name || '').trim() ? `Hi, ${(profile?.name || '').trim().split(/\s+/)[0]}.` : 'Hi there.'}</p><h1 id="studio-heading">Create your catalog image</h1></div><p>You bring the jewelry.<br />We help set the scene.</p></section>
       <ol className="flow-steps" aria-label="Your progress"><li className={source ? 'complete' : 'current'} aria-current={!source ? 'step' : undefined}><span>{source ? <StudioIcon name="check" /> : '01'}</span>Upload your photo</li><li className={source && !reviewing ? 'current' : ''} aria-current={source && !reviewing ? 'step' : undefined}><span>02</span>Set the direction</li><li className={reviewing ? 'current' : ''} aria-current={reviewing ? 'step' : undefined}><span>03</span>Review & create</li></ol>
       <section className="workspace" aria-label="Catalog generator">
         <form className="panel upload-panel" onSubmit={reviewRequest}>
@@ -396,7 +415,7 @@ function StudioPage() {
             <figure className="comparison-item">
               <figcaption>Original photo</figcaption>
               <div className="comparison-stage original-stage">
-                {selectedJob ? <img key={`${selectedJob.id}-source-${recheck}`} src={`${API_URL}/jobs/${selectedJob.id}/source`} alt="Original jewelry for this request" onError={() => setMediaError('The original photo is unavailable. Check your connection or upload the photo again.')} />
+                {selectedJob ? <PrivateImage path={`/jobs/${selectedJob.id}/source`} reload={recheck} alt="Original jewelry for this request" onError={() => setMediaError('The original photo is unavailable. Check your connection or upload the photo again.')} />
                   : source ? <img src={source.url} alt="Selected original jewelry" /> : <span className="original-placeholder"><StudioIcon name="image" /><strong>The starting point</strong><small>Your photo belongs here.</small></span>}
               </div>
             </figure>
@@ -404,7 +423,7 @@ function StudioPage() {
               <figcaption>Catalog result</figcaption>
               <div className={`comparison-stage preview-stage ${previewStyle}`}>
                 {selectedJob?.status === 'completed'
-                  ? <img key={`${selectedJob.id}-result-${recheck}`} src={`${API_URL}/jobs/${selectedJob.id}/result`} alt="Generated jewelry catalog result" onError={() => setMediaError('The generated image could not be loaded. Check your connection and check status again.')} />
+                  ? <PrivateImage path={`/jobs/${selectedJob.id}/result`} reload={recheck} alt="Generated jewelry catalog result" onError={() => setMediaError('The generated image could not be loaded. Check your connection and check status again.')} />
                   : <div className="empty-preview"><span className="preview-gem"><StudioIcon name="spark" /></span><strong>{statusMessage}</strong><span>
                     {selectedJob?.status === 'mock_completed' ? 'Your photo and choices were processed. Image generation is not enabled in this preview.'
                       : selectedJob?.status === 'failed' ? 'Choose your photo again, review your preferences, and submit a new request.'
@@ -420,12 +439,12 @@ function StudioPage() {
         </div>
       </section>
       <section className="panel history-panel" id="requests" aria-labelledby="history-heading">
-        <div className="panel-heading"><div><span className="step">03</span><h2 id="history-heading">Recent requests</h2></div><span className="subtle-label">This browser</span></div>
-        <p className="field-help">Your last 12 requests are saved in this browser. Select one to check its status or view its image.</p>
+        <div className="panel-heading"><div><span className="step">03</span><h2 id="history-heading">Recent requests</h2></div><span className="subtle-label">Your account</span></div>
+        <p className="field-help">Your latest 12 requests are saved in your account. Select one to check its status or view its image.</p>
         {history.length === 0 && <p className="history-empty">Your requests will appear here after you create your first brief.</p>}
         <div className="history-list">{history.map(job => <button type="button" className={`history-item ${selectedId === job.id ? 'selected' : ''}`} key={job.id} aria-pressed={selectedId === job.id} disabled={submitting} onClick={() => { setSelectedId(job.id); setRecheck(value => value + 1) }}><span><strong>{job.filename}</strong><small>{job.preferences.model_type} · {job.preferences.background} · {new Date(job.createdAt).toLocaleDateString()}</small></span><span className="history-status">{STATUS_LABELS[job.status]}</span></button>)}</div>
       </section>
-      {storageError && <p className="error-message" role="alert">{storageError}</p>}
+      {historyError && <p className="error-message" role="alert">{historyError} <button className="text-button" onClick={() => setHistoryReload(value => value + 1)}>Reload requests</button></p>}
         </div>
       </div>
       <SiteFooter />
@@ -484,9 +503,12 @@ function LandingPage() {
 }
 
 export default function App() {
+  const { user, loading, verified } = useAuth()
+  const signIn = window.location.pathname.replace(/\/+$/, '') === '/signin'
   const studio = window.location.pathname.replace(/\/+$/, '') === '/studio'
   useEffect(() => {
     document.title = studio ? 'Create a catalog image | Jewel Studio' : 'Jewel Studio | Jewelry catalog photography'
   }, [studio])
-  return studio ? <StudioPage /> : <LandingPage />
+  if (signIn || (studio && (loading || !user || !verified))) return <AuthPage />
+  return studio ? <StudioPage key={user!.uid} /> : <LandingPage />
 }

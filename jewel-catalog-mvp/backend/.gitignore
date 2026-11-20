@@ -2,3 +2,9 @@
 uploads/
 jobs.db
 generated/
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*service-account*.json
+*firebase-adminsdk*.json

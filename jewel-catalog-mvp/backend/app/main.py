@@ -1,5 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
+from datetime import datetime, timezone
+import os
 import sqlite3
 import json
 import asyncio
@@ -8,14 +10,15 @@ from contextlib import asynccontextmanager, closing
 from fastapi.params import Form
 from app.worker import GENERATED_DIR, job_queue, worker_loop
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, Query
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.whatsapp import router as whatsapp_router
 from app.services.preferences import CatalogPreferences
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
+from app.auth import AuthUser, require_user, require_verified_user
 
 
 @asynccontextmanager
@@ -41,14 +44,21 @@ app.include_router(whatsapp_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=[origin.strip() for origin in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",") if origin.strip()],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def private_responses(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/jobs", "/me", "/webhooks/whatsapp/mock")):
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 UPLOAD_DIR = Path("uploads")
@@ -71,7 +81,10 @@ def init_db():
                 job_id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
                 image_path TEXT NOT NULL,
-                preferences_json TEXT NOT NULL DEFAULT '{}'
+                preferences_json TEXT NOT NULL DEFAULT '{}',
+                owner_id TEXT,
+                filename TEXT NOT NULL DEFAULT 'Jewelry photo',
+                created_at TEXT NOT NULL DEFAULT ''
             )
         """)
         columns = {
@@ -82,6 +95,22 @@ def init_db():
                 ALTER TABLE jobs
                 ADD COLUMN preferences_json TEXT NOT NULL DEFAULT '{}'
             """)
+
+        for column, declaration in {
+            "owner_id": "TEXT",
+            "filename": "TEXT NOT NULL DEFAULT 'Jewelry photo'",
+            "created_at": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if column not in columns:
+                conn.execute(f"ALTER TABLE jobs ADD COLUMN {column} {declaration}")
+        conn.execute("CREATE INDEX IF NOT EXISTS jobs_owner_created ON jobs(owner_id, created_at)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                uid TEXT PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                business TEXT NOT NULL DEFAULT ''
+            )
+        """)
 
 
 @app.get("/health")
@@ -94,6 +123,7 @@ async def create_job(
     image: UploadFile = File(...),
     style: str = Form("ivory"),
     preferences: str | None = Form(None),
+    user: AuthUser = Depends(require_verified_user),
 ):
     if style not in CATALOG_BACKGROUNDS:
         raise HTTPException(status_code=400, detail="Invalid catalog style.")
@@ -170,14 +200,17 @@ async def create_job(
         with closing(sqlite3.connect(DB_PATH)) as conn, conn:
             conn.execute(
                 """
-                INSERT INTO jobs (job_id, status, image_path, preferences_json)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO jobs (job_id, status, image_path, preferences_json, owner_id, filename, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
                     "received",
                     str(image_path),
                     json.dumps(customer_preferences.for_generation()),
+                    user.uid,
+                    Path((image.filename or "Jewelry photo").replace("\\", "/")).name[:255],
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
     except Exception:
@@ -193,12 +226,59 @@ async def create_job(
     return {"job_id": job_id, "status": "received"}
 
 
+@app.get("/jobs")
+def list_jobs(
+    user: AuthUser = Depends(require_verified_user),
+    limit: int = Query(12, ge=1, le=100),
+):
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """SELECT job_id, status, preferences_json, filename, created_at
+            FROM jobs WHERE owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?""",
+            (user.uid, limit),
+        ).fetchall()
+    return [{
+        "job_id": row["job_id"], "status": row["status"],
+        "preferences": json.loads(row["preferences_json"]),
+        "filename": row["filename"], "created_at": row["created_at"],
+    } for row in rows]
+
+
+class ProfileUpdate(BaseModel):
+    name: str = Field(max_length=80)
+    business: str = Field(max_length=120)
+
+
+@app.get("/me")
+def get_profile(user: AuthUser = Depends(require_user)):
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        conn.execute("INSERT OR IGNORE INTO users (uid, name) VALUES (?, ?)", (user.uid, user.name))
+        row = conn.execute("SELECT name, business FROM users WHERE uid = ?", (user.uid,)).fetchone()
+    return {
+        "uid": user.uid, "name": row[0], "business": row[1],
+        "email": user.email, "phone": user.phone,
+        "email_verified": user.email_verified,
+    }
+
+
+@app.put("/me")
+def update_profile(body: ProfileUpdate, user: AuthUser = Depends(require_user)):
+    with closing(sqlite3.connect(DB_PATH)) as conn, conn:
+        conn.execute(
+            """INSERT INTO users (uid, name, business) VALUES (?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET name=excluded.name, business=excluded.business""",
+            (user.uid, body.name.strip(), body.business.strip()),
+        )
+    return get_profile(user)
+
+
 @app.get("/jobs/{job_id}")
-def get_job(job_id: str):
+def get_job(job_id: str, user: AuthUser = Depends(require_verified_user)):
     with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.row_factory = sqlite3.Row
         job = conn.execute(
-            "SELECT job_id, status FROM jobs WHERE job_id = ?", (job_id,)
+            "SELECT job_id, status FROM jobs WHERE job_id = ? AND owner_id = ?", (job_id, user.uid)
         ).fetchone()
 
     if job is None:
@@ -208,12 +288,12 @@ def get_job(job_id: str):
 
 
 @app.get("/jobs/{job_id}/result")
-def get_job_result(job_id: str):
+def get_job_result(job_id: str, user: AuthUser = Depends(require_verified_user)):
     # Check whether the job exists and is completed.
     with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         row = conn.execute(
-            "SELECT status FROM jobs WHERE job_id = ?",
-            (job_id,),
+            "SELECT status FROM jobs WHERE job_id = ? AND owner_id = ?",
+            (job_id, user.uid),
         ).fetchone()
 
     if row is None:
@@ -237,15 +317,16 @@ def get_job_result(job_id: str):
     return FileResponse(
         path=output_path,
         media_type="image/png",
+        headers={"Cache-Control": "private, no-store"},
         filename=f"{job_id}.png",
     )
 
 
 @app.get("/jobs/{job_id}/source")
-def get_job_source(job_id: str):
+def get_job_source(job_id: str, user: AuthUser = Depends(require_verified_user)):
     with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         row = conn.execute(
-            "SELECT image_path FROM jobs WHERE job_id = ?", (job_id,)
+            "SELECT image_path FROM jobs WHERE job_id = ? AND owner_id = ?", (job_id, user.uid)
         ).fetchone()
 
     if row is None:
@@ -255,4 +336,4 @@ def get_job_source(job_id: str):
     if not image_path.is_file():
         raise HTTPException(status_code=404, detail="Original image is unavailable.")
 
-    return FileResponse(path=image_path, media_type="image/png")
+    return FileResponse(path=image_path, media_type="image/png", headers={"Cache-Control": "private, no-store"})

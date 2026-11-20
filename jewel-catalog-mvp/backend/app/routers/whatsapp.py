@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import datetime, timezone
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -9,13 +10,20 @@ from uuid import uuid4
 from io import BytesIO
 from app.worker import job_queue
 
-from fastapi import File, UploadFile
+from fastapi import Depends, File, UploadFile
+from app.auth import AuthUser, require_verified_user
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["WhatsApp"])
+
+
+def require_mock_user(user: AuthUser = Depends(require_verified_user)) -> AuthUser:
+    if os.getenv("APP_ENV") == "production":
+        raise HTTPException(status_code=404, detail="Not found.")
+    return user
 
 
 @router.get("")
@@ -117,9 +125,14 @@ def init_mock_sessions():
                 status TEXT NOT NULL,
                 image_path TEXT,
                 answers_json TEXT NOT NULL DEFAULT '{}',
-                question_index INTEGER NOT NULL DEFAULT 0
+                question_index INTEGER NOT NULL DEFAULT 0,
+                owner_id TEXT
             )
         """)
+
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(mock_sessions)")}
+        if "owner_id" not in columns:
+            conn.execute("ALTER TABLE mock_sessions ADD COLUMN owner_id TEXT")
 
 
 init_mock_sessions()
@@ -129,12 +142,12 @@ class MockMessage(BaseModel):
     message: str
 
 
-def get_session(session_id: str):
+def get_session(session_id: str, owner_id: str):
     with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT * FROM mock_sessions WHERE session_id = ?",
-            (session_id,),
+            "SELECT * FROM mock_sessions WHERE session_id = ? AND owner_id = ?",
+            (session_id, owner_id),
         ).fetchone()
 
     if row is None:
@@ -169,16 +182,16 @@ def prepare_generation_request(session: dict) -> dict:
 
 
 @router.post("/mock/start")
-def start_mock_conversation():
+def start_mock_conversation(user: AuthUser = Depends(require_mock_user)):
     session_id = str(uuid4())
 
     with closing(sqlite3.connect(DB_PATH)) as conn, conn:
         conn.execute(
             """
-            INSERT INTO mock_sessions (session_id, status, answers_json)
-            VALUES (?, 'awaiting_photo', '{}')
+            INSERT INTO mock_sessions (session_id, status, answers_json, owner_id)
+            VALUES (?, 'awaiting_photo', '{}', ?)
             """,
-            (session_id,),
+            (session_id, user.uid),
         )
 
     return {
@@ -192,8 +205,9 @@ def start_mock_conversation():
 async def upload_mock_photo(
     session_id: str,
     image: UploadFile = File(...),
+    user: AuthUser = Depends(require_mock_user),
 ):
-    session = get_session(session_id)
+    session = get_session(session_id, user.uid)
 
     if session["status"] != "awaiting_photo":
         raise HTTPException(
@@ -255,8 +269,8 @@ async def upload_mock_photo(
 
 
 @router.post("/mock/{session_id}/message")
-def answer_mock_question(session_id: str, body: MockMessage):
-    session = get_session(session_id)
+def answer_mock_question(session_id: str, body: MockMessage, user: AuthUser = Depends(require_mock_user)):
+    session = get_session(session_id, user.uid)
 
     if session["status"] != "collecting_answers":
         raise HTTPException(
@@ -326,8 +340,8 @@ def answer_mock_question(session_id: str, body: MockMessage):
 
 
 @router.post("/mock/{session_id}/create-job", status_code=201)
-def create_mock_job(session_id: str):
-    session = get_session(session_id)
+def create_mock_job(session_id: str, user: AuthUser = Depends(require_mock_user)):
+    session = get_session(session_id, user.uid)
 
     if session["status"] != "ready_for_generation":
         raise HTTPException(
@@ -346,15 +360,16 @@ def create_mock_job(session_id: str):
                 job_id,
                 status,
                 image_path,
-                preferences_json
+                preferences_json, owner_id, filename, created_at
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
                 "received",
                 request_data["image_path"],
                 json.dumps(request_data["customer_preferences"]),
+                user.uid, "WhatsApp photo", datetime.now(timezone.utc).isoformat(),
             ),
         )
 
@@ -368,8 +383,8 @@ def create_mock_job(session_id: str):
 
 
 @router.get("/mock/{session_id}")
-def inspect_mock_session(session_id: str):
-    session = get_session(session_id)
+def inspect_mock_session(session_id: str, user: AuthUser = Depends(require_mock_user)):
+    session = get_session(session_id, user.uid)
     return {
         "session_id": session["session_id"],
         "status": session["status"],

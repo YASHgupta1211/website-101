@@ -3,3 +3,9 @@ uploads/
 jobs.db
 generated/
 __pycache__/
+.env.*
+!.env.example
+node_modules/
+dist/
+.firebase/
+firebase-debug.log*

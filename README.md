@@ -1,10 +1,26 @@
-﻿# Jewel Studio
+# Jewel Studio
 
 A jewelry catalog-image studio built with React, TypeScript, and FastAPI. Sellers upload a product photo, answer guided styling questions, and request a new image using their original photo, preset instructions, and preferences.
 
 The product is intended for both the website and WhatsApp. The current website works with a mock generation pipeline; the WhatsApp conversation is a development mock.
 
 **Current generation mode:** mock. Requests save an assembled prompt, not an AI-generated image. The decorative hero photograph is an editorial concept, not a demonstrated customer result.
+
+## Current outlook
+
+| Area | Implemented | Still needed |
+| --- | --- | --- |
+| Website | Public landing page, protected dashboard, responsive studio UI | Production hosting and domain |
+| Accounts | Google, passwordless email-link, phone-code signup/sign-in; account profile | Configure a real Firebase project and verify provider delivery |
+| Catalog flow | Upload validation, guided preferences, confirmation, job tracking, comparison/download UI | Enable and evaluate real image generation |
+| Privacy | Verified tokens, owner-scoped jobs/files, account-owned history | Retention/deletion policy and operational controls |
+| Reliability | SQLite records, schema upgrades, worker, failure handling | Durable queue, restart recovery, quotas, spending limits, backups |
+| WhatsApp | Signed webhook verification and authenticated mock conversation | Live media handling, conversation flow, result delivery, onboarding |
+
+The code is a development prototype, not a deployed public service. Authentication
+has been exercised with Firebase's local emulator; image generation remains in
+mock mode. Configure Firebase first, then validate the real generation pipeline
+before inviting everyday users.
 
 ## Features
 
@@ -14,11 +30,12 @@ The product is intended for both the website and WhatsApp. The current website w
 - A confirmation step before submitting a generation request.
 - Job progress, explicit mock completion, readable errors, and connection recovery.
 - Original/result comparison and PNG downloads for completed real generations.
-- The last 12 requests saved in the current browser, with status recovery after refresh.
+- Google, passwordless email-link, and phone-code signup/sign-in through Firebase.
+- The latest 12 account-owned requests, with status recovery across devices.
 - A responsive ivory, olive, and gold studio interface with custom icons and editorial artwork.
 - WhatsApp webhook verification, signature validation, and a guided mock conversation.
 
-Browser history stores request references and preferences, not image bytes. It is specific to the browser and origin; it is not an account or cross-device history.
+Profiles belong to authenticated accounts; job creation and history require verified email or phone ownership. Job status, originals, and results require authenticated owner access. Existing anonymous jobs are preserved but are not automatically assigned to a new account.
 
 ## Requirements
 
@@ -28,7 +45,7 @@ Browser history stores request references and preferences, not image bytes. It i
 
 ## Run locally
 
-Open two terminals from the repository root.
+First follow [Firebase setup](jewel-catalog-mvp/docs/AUTH_AND_DEPLOYMENT.md) and copy the frontend/backend `.env.example` files to `.env` with your project settings. No live Firebase project has been connected yet. Then open two terminals from the repository root.
 
 **Frontend:**
 
@@ -54,14 +71,17 @@ Keep the backend working directory as shown: the database, uploads, and generate
 | API documentation | http://127.0.0.1:8000/docs |
 | Health check | http://127.0.0.1:8000/health |
 
-The frontend API address is currently defined in `src/App.tsx`. Backend CORS allows localhost and 127.0.0.1 on port 5173. Keep these settings aligned if changing ports.
+Set the frontend API address with `VITE_API_URL` and backend CORS with `ALLOWED_ORIGINS`. Defaults allow local development on ports 5173 and 8000. Keep these aligned when changing ports or deploying.
 
 On Windows PowerShell, use `npm.cmd` instead of `npm` if script execution policy blocks `npm.ps1`.
 
 ## How requests work
 
 ```text
-Photo + preferences -> Backend validation -> SQLite job + in-memory queue
+Firebase sign-in -> Verified token -> Photo + preferences
+                                             |
+                                             v
+                          Backend validation -> SQLite job + in-memory queue
                                              |
                                              v
                            Worker -> Prompt builder -> Generation service
@@ -80,7 +100,7 @@ A job ID identifies one generation request. The database stores its status, imag
 
 To enable real image editing deliberately:
 
-1. Create `jewel-catalog-mvp/backend/.env` with `OPENAI_API_KEY=your_api_key`.
+1. Add `OPENAI_API_KEY=your_api_key` to `jewel-catalog-mvp/backend/.env`, preserving the Firebase and other existing settings.
 2. Confirm access to the model configured in `backend/app/services/image_generation.py`.
 3. Change `MOCK_GENERATION` to `False` in the worker and restart the backend if necessary.
 
@@ -91,13 +111,15 @@ The current service submits the original image and constructed prompt to the ima
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | GET | `/health` | Basic availability check |
+| GET / PUT | `/me` | Read/update the signed-in account profile |
+| GET | `/jobs` | List the signed-in account's jobs |
 | POST | `/jobs` | Submit an image and preferences; returns a job ID |
 | GET | `/jobs/{job_id}` | Retrieve status |
 | GET | `/jobs/{job_id}/source` | Retrieve the normalized original photo |
 | GET | `/jobs/{job_id}/result` | Download the result of a `completed` job |
 | GET / POST | `/webhooks/whatsapp` | Verify subscription / validate incoming webhook signatures |
 
-Use `/docs` to explore and submit multipart requests interactively.
+Use `/docs` to explore the API. Job and profile endpoints require `Authorization: Bearer <Firebase ID token>`. Job routes require verified email or phone ownership; health and signed live webhooks remain public.
 
 `POST /jobs` accepts multipart `image` and optional JSON-encoded `preferences`, for example:
 
@@ -119,7 +141,7 @@ Worker statuses are `received`, `processing`, `completed`, `failed`, and `mock_c
 
 The webhook supports verification using `WHATSAPP_VERIFY_TOKEN` and signature validation using `WHATSAPP_APP_SECRET`, configured in `backend/.env`.
 
-The mock endpoints under `/webhooks/whatsapp/mock` allow starting a session, uploading a photo, answering guided questions, and creating a queued job. Use the API documentation or `backend/test_pipeline.html` to explore the development flow.
+Authenticated development-only mock endpoints under `/webhooks/whatsapp/mock` allow starting a session, uploading a photo, answering guided questions, and creating a queued job. Use the API documentation with a Firebase bearer token to explore the development flow. The legacy HTML harness has not been updated for authenticated requests. Mock endpoints are disabled with `APP_ENV=production`.
 
 The live webhook does not yet download WhatsApp media, conduct conversations, or deliver generated images. Those steps and Meta production onboarding remain future work.
 
@@ -128,15 +150,22 @@ The live webhook does not yet download WhatsApp media, conduct conversations, or
 ```text
 AGENTS.md                           Contributor and agent guidelines
 jewel-catalog-mvp/
-  src/App.tsx                       Guided upload, tracking, and comparison UI
+  src/App.tsx                       Landing page and protected catalog dashboard
+  src/AuthPage.tsx                  Google, email-link, and phone signup/sign-in
+  src/AuthContext.tsx               Firebase session and account profile state
+  src/SiteChrome.tsx                Shared navigation, account dialog, and footer
+  src/api.ts                        Authenticated requests and token refresh
   src/styles.css                    Responsive studio design
   public/images/                    Decorative artwork and generation provenance
   backend/app/main.py               FastAPI app, validation, database, and endpoints
+  backend/app/auth.py               Firebase verification and access guards
   backend/app/worker.py             Queue processing and mock/real generation
   backend/app/services/             Preferences, prompts, and image-edit integration
   backend/app/routers/whatsapp.py    Webhook security and mock conversations
   backend/tests/                    Isolated API and worker checks
-  backend/test_pipeline.html        Manual development harness
+  backend/test_pipeline.html        Legacy harness without auth-token support
+  docs/AUTH_AND_DEPLOYMENT.md        Firebase setup and launch prerequisites
+  firebase.json                     Local Auth emulator and SPA hosting rewrites
 ```
 
 Runtime data is stored in `backend/jobs.db`, `backend/uploads/`, and `backend/generated/`. Keep runtime files out of source control.
@@ -155,14 +184,25 @@ From `jewel-catalog-mvp/backend/`:
 uv run python -B -m unittest discover -s tests -v
 ```
 
-Backend tests use temporary databases/uploads and fake provider output. They cover validation, preference persistence, product/model prompts, mock completion, worker failures, source/result retrieval, and the WhatsApp mock flow.
+The current backend suite contains 18 tests using temporary databases/uploads and fake provider output. They cover validation, preference persistence, product/model prompts, mock completion, worker failures, source/result retrieval, and the WhatsApp mock flow.
 
 For UI changes, check desktop and phone layouts, upload validation, conditional questions, review/edit/confirm, terminal statuses, refresh/history recovery, and connection-error recovery. There is no configured frontend test framework or coverage threshold.
 
+### Last implementation verification
+
+The production build and 18 backend tests passed during the authentication
+implementation. Desktop/mobile browser checks exercised Google sign-in,
+passwordless email-link completion, phone-code signup, incorrect-code recovery,
+private image retrieval, refresh/history restoration, and cross-account isolation
+against the official Firebase Auth emulator. No real email/SMS or paid image calls
+were used. These results do not establish live-provider or production readiness.
+
 ## Before a public launch
 
-This is a development prototype. Authentication, per-user file authorization, quotas, payments, durable queue recovery, and production WhatsApp delivery are not implemented. Job IDs are tracking references, not access controls. Browser history can restore status checks but cannot recover work lost from the in-memory queue after a backend restart.
+This is a development prototype. Generation quotas, payments, durable queue recovery, and production WhatsApp delivery are not implemented. Authentication and per-user authorization are implemented but require Firebase configuration before live use. Job IDs are tracking references, not access controls. Account history can restore status checks but cannot recover work lost from the in-memory queue after a backend restart.
 
 Keep secrets on the backend and out of `VITE_` variables, logs, and commits. Do not commit credentials, databases, uploaded photos, generated customer outputs, bytecode, dependencies, or build artifacts.
 
 See [application notes](jewel-catalog-mvp/README.md), [artwork provenance](jewel-catalog-mvp/public/images/README.md), and [repository guidelines](AGENTS.md) for more detail.
+
+See [authentication setup and deployment checklist](jewel-catalog-mvp/docs/AUTH_AND_DEPLOYMENT.md) for Firebase project creation, Google/email/phone providers, SMS billing, local emulation, and the remaining public-launch requirements.
